@@ -1,9 +1,21 @@
+/******************************/
+/*     [L4D(2)] Laser Tag     */
+/*       By KrX/ Whosat       */
+/* -------------------------- */
+/* Creates a laser beam from  */
+/*  player to bullet impact   */
+/*  point.                    */
+/* -------------------------- */
+/*  Version 0.2 (12 Jan 2011) */
+/* -------------------------- */
+/******************************/
+
 #include <sourcemod>
 #include <sdktools>
 
-#define PLUGIN_VERSION "0.1"
+#define PLUGIN_VERSION "0.2"
 
-#define DEFAULT_FLAGS FCVAR_PLUGIN
+#define DEFAULT_FLAGS FCVAR_PLUGIN|FCVAR_NOTIFY
 
 #define WEAPONTYPE_PISTOL   6
 #define WEAPONTYPE_RIFLE    5
@@ -24,33 +36,37 @@ new Handle:cvar_snipers;
 new Handle:cvar_smgs;
 new Handle:cvar_shotguns;
 
-new Handle:cvar_laser_offset;
-
 new Handle:cvar_laser_red;
 new Handle:cvar_laser_green;
 new Handle:cvar_laser_blue;
-
 new Handle:cvar_laser_alpha;
+
+new Handle:cvar_bots_red;
+new Handle:cvar_bots_green;
+new Handle:cvar_bots_blue;
+new Handle:cvar_bots_alpha;
+
 new Handle:cvar_laser_life;
 new Handle:cvar_laser_width;
-new Handle:cvar_laser_width2;
+new Handle:cvar_laser_offset;
 
 new bool:g_LaserTagEnable = true;
-new bool:g_Bots = true;
+new bool:g_Bots;
 
 new bool:b_TagWeapon[7];
 new Float:g_LaserOffset;
 new Float:g_LaserWidth;
 new Float:g_LaserLife;
 new g_LaserColor[4];
+new g_BotsLaserColor[4];
 new g_Sprite;
 
 new GameMode;
-new bool:isL4D2=false;
+new bool:isL4D2;
 
 public Plugin:myinfo = 
 {
-	name = "[L4D/L4D2] Laser Tag",
+	name = "[L4D(2)] Laser Tag",
 	author = "KrX/Whosat",
 	description = "Shows a laser for straight-flying fired projectiles",
 	version = PLUGIN_VERSION,
@@ -69,24 +85,32 @@ public OnPluginStart()
 	cvar_snipers = CreateConVar("l4d_lasertag_snipers", "1", "LaserTagging for Sniper Rifles. 0=disable, 1=enable", DEFAULT_FLAGS, true, 0.0, true, 1.0);
 	cvar_smgs = CreateConVar("l4d_lasertag_smgs", "1", "LaserTagging for SMGs. 0=disable, 1=enable", DEFAULT_FLAGS, true, 0.0, true, 1.0);
 	cvar_shotguns = CreateConVar("l4d_lasertag_shotguns", "1", "LaserTagging for Shotguns. 0=disable, 1=enable", DEFAULT_FLAGS, true, 0.0, true, 1.0);
+		
+	cvar_laser_red = CreateConVar("l4d_lasertag_red", "0", "Amount of Red", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	cvar_laser_green = CreateConVar("l4d_lasertag_green", "125", "Amount of Green", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	cvar_laser_blue = CreateConVar("l4d_lasertag_blue", "255", "Amount of Blue", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	cvar_laser_alpha = CreateConVar("l4d_lasertag_alpha", "100", "Transparency (Alpha) of Laser", DEFAULT_FLAGS, true, 0.0, true, 255.0);
 	
-	cvar_laser_offset = CreateConVar("l4d_lasertag_offset", "36", "Lasertag Offset", DEFAULT_FLAGS);
-
-	cvar_laser_red = CreateConVar("l4d_lasertag_red", "200", "Amount of Red", DEFAULT_FLAGS, true, 0.0, true, 255.0);
-	cvar_laser_green = CreateConVar("l4d_lasertag_green", "0", "Amount of Green", DEFAULT_FLAGS, true, 0.0, true, 255.0);
-	cvar_laser_blue = CreateConVar("l4d_lasertag_blue", "0", "Amount of Blue", DEFAULT_FLAGS, true, 0.0, true, 255.0);
-
-	cvar_laser_alpha = CreateConVar("l4d_lasertag_alpha", "175", "Transparency (Alpha) of Laser", DEFAULT_FLAGS, true, 0.0, true, 255.0);
-	cvar_laser_life = CreateConVar("l4d_lasertag_life", "0.75", "Seconds Laser will remain", DEFAULT_FLAGS, true, 0.1);
+	cvar_bots_red = CreateConVar("l4d_lasertag_bots_red", "0", "Bots Laser - Amount of Red", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	cvar_bots_green = CreateConVar("l4d_lasertag_bots_green", "255", "Bots Laser - Amount of Green", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	cvar_bots_blue = CreateConVar("l4d_lasertag_bots_blue", "75", "Bots Laser - Amount of Blue", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	cvar_bots_alpha = CreateConVar("l4d_lasertag_bots_alpha", "70", "Bots Laser - Transparency (Alpha) of Laser", DEFAULT_FLAGS, true, 0.0, true, 255.0);
+	
+	cvar_laser_life = CreateConVar("l4d_lasertag_life", "0.80", "Seconds Laser will remain", DEFAULT_FLAGS, true, 0.1);
 	cvar_laser_width = CreateConVar("l4d_lasertag_width", "1.0", "Width of Laser", DEFAULT_FLAGS, true, 1.0);
-	cvar_laser_width2 = CreateConVar("l4d_lasertag_width2", "1.0", "Width2 of Laser (L4D2)", DEFAULT_FLAGS, true, 1.0);
+	cvar_laser_offset = CreateConVar("l4d_lasertag_offset", "36", "Lasertag Offset", DEFAULT_FLAGS);
 	
 	CreateConVar("l4d_lasertag_version", PLUGIN_VERSION, "Lasertag Version", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD);
-
+	
 	AutoExecConfig(true, "l4d_lasertag");
- 
+	
 	decl String:GameName[16];
 	GetConVarString(FindConVar("mp_gamemode"), GameName, sizeof(GameName));
+	
+	// Check if L4D2 or L4D1
+	GetGameFolderName(GameName, sizeof(GameName));
+	if (StrEqual(GameName, "left4dead2", false)) isL4D2 = true;
+	else isL4D2 = false;
 	
 	if (StrEqual(GameName, "survival", false))
 		GameMode = 3;
@@ -98,11 +122,6 @@ public OnPluginStart()
 		GameMode = 0;
 	else
 		GameMode = -1;
-	
-	// Check if L4D2 or L4D1
-	GetGameFolderName(GameName, sizeof(GameName));
-	if (StrEqual(GameName, "left4dead2", false)) isL4D2 = true;
-	else isL4D2 = false;
 	
 	HookEvent("bullet_impact", Event_BulletImpact);
 	
@@ -117,6 +136,19 @@ public OnPluginStart()
 	HookConVarChange(cvar_snipers, CheckWeapons);
 	HookConVarChange(cvar_smgs, CheckWeapons);
 	HookConVarChange(cvar_shotguns, CheckWeapons);
+	
+	HookConVarChange(cvar_laser_red, UselessHooker);
+	HookConVarChange(cvar_laser_blue, UselessHooker);
+	HookConVarChange(cvar_laser_green, UselessHooker);
+	HookConVarChange(cvar_laser_alpha, UselessHooker);
+	HookConVarChange(cvar_bots_red, UselessHooker);
+	HookConVarChange(cvar_bots_blue, UselessHooker);
+	HookConVarChange(cvar_bots_green, UselessHooker);
+	HookConVarChange(cvar_bots_alpha, UselessHooker);
+	
+	HookConVarChange(cvar_laser_life, UselessHooker);
+	HookConVarChange(cvar_laser_width, UselessHooker);
+	HookConVarChange(cvar_laser_offset, UselessHooker);
 }
 
 public OnMapStart()
@@ -131,20 +163,28 @@ public OnMapStart()
 	}
 }
 
+public UselessHooker(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	OnConfigsExecuted();
+}
+
 public OnConfigsExecuted()
 {
 	CheckEnabled(INVALID_HANDLE, "", "");
 	CheckWeapons(INVALID_HANDLE, "", "");
 	
-	g_LaserOffset = GetConVarFloat(cvar_laser_offset);
-	g_LaserColor[0] = GetConVarInt(cvar_laser_red); 
+	g_LaserColor[0] = GetConVarInt(cvar_laser_red);
 	g_LaserColor[1] = GetConVarInt(cvar_laser_green);
 	g_LaserColor[2] = GetConVarInt(cvar_laser_blue);
 	g_LaserColor[3] = GetConVarInt(cvar_laser_alpha);
-	g_LaserLife = GetConVarFloat(cvar_laser_life);
+	g_BotsLaserColor[0] = GetConVarInt(cvar_bots_red);
+	g_BotsLaserColor[1] = GetConVarInt(cvar_bots_green);
+	g_BotsLaserColor[2] = GetConVarInt(cvar_bots_blue);
+	g_BotsLaserColor[3] = GetConVarInt(cvar_bots_alpha);
 	
-	if(isL4D2) g_LaserWidth = GetConVarFloat(cvar_laser_width2);
-	else g_LaserWidth = GetConVarFloat(cvar_laser_width);
+	g_LaserLife = GetConVarFloat(cvar_laser_life);
+	g_LaserWidth = GetConVarFloat(cvar_laser_width);
+	g_LaserOffset = GetConVarFloat(cvar_laser_offset);
 }
 
 public CheckEnabled(Handle:convar, const String:oldValue[], const String:newValue[])
@@ -183,10 +223,10 @@ GetWeaponType(userid)
 	GetClientWeapon(userid, weapon, 32);
 	
 	if(StrEqual(weapon, "weapon_hunting_rifle") || StrContains(weapon, "sniper") >= 0) return WEAPONTYPE_SNIPER;
-	if(StrContains(weapon, "weapon_rifle") >=0 ) return WEAPONTYPE_RIFLE;
+	if(StrContains(weapon, "weapon_rifle") >= 0) return WEAPONTYPE_RIFLE;
 	if(StrContains(weapon, "pistol") >= 0) return WEAPONTYPE_PISTOL;
 	if(StrContains(weapon, "smg") >= 0) return WEAPONTYPE_SMG;
-	if(StrContains(weapon, "shotgun") >=0 ) return WEAPONTYPE_SHOTGUN;
+	if(StrContains(weapon, "shotgun") >=0) return WEAPONTYPE_SHOTGUN;
 	
 	return WEAPONTYPE_UNKNOWN;
 }
@@ -197,21 +237,32 @@ public Action:Event_BulletImpact(Handle:event, const String:name[], bool:dontBro
 	
 	// Get Shooter's Userid
 	new userid = GetClientOfUserId(GetEventInt(event, "userid"));
+	// Check if is Survivor
  	if(GetClientTeam(userid) != 2) return Plugin_Continue;
-	if(IsFakeClient(userid) && !g_Bots) return Plugin_Continue;
+	// Check if is Bot and enabled
+	new bot = 0;
+	if(IsFakeClient(userid)) { if(!g_Bots) return Plugin_Continue; bot = 1; }
 	
 	// Check if the weapon is an enabled weapon type to tag
 	if(b_TagWeapon[GetWeaponType(userid)])
 	{
 		// Bullet impact location
-		new Float:x=GetEventFloat(event, "x");
-		new Float:y=GetEventFloat(event, "y");
-		new Float:z=GetEventFloat(event, "z");
+		new Float:x = GetEventFloat(event, "x");
+		new Float:y = GetEventFloat(event, "y");
+		new Float:z = GetEventFloat(event, "z");
 		
 		decl Float:startPos[3];
-		startPos[0]=x;
-		startPos[1]=y;
-		startPos[2]=z;
+		startPos[0] = x;
+		startPos[1] = y;
+		startPos[2] = z;
+		
+		/*decl Float:bulletPos[3];
+		bulletPos[0] = x;
+		bulletPos[1] = y;
+		bulletPos[2] = z;*/
+		
+		decl Float:bulletPos[3];
+		bulletPos = startPos;
 		
 		// Current player's EYE position
 		decl Float:playerPos[3];
@@ -221,19 +272,17 @@ public Action:Event_BulletImpact(Handle:event, const String:name[], bool:dontBro
 		SubtractVectors(playerPos, startPos, lineVector);
 		NormalizeVector(lineVector, lineVector);
 		
-		decl Float:bulletPos[3];
-		bulletPos[0]=x;
-		bulletPos[1]=y;
-		bulletPos[2]=z;
-		
 		// Offset
 		ScaleVector(lineVector, g_LaserOffset);
 		// Find starting point to draw line from
 		SubtractVectors(playerPos, lineVector, startPos);
 		
 		// Draw the line
-		TE_SetupBeamPoints(startPos, bulletPos, g_Sprite, 0, 0, 0, g_LaserLife, g_LaserWidth, g_LaserWidth, 1, 0.0, g_LaserColor, 0);
+		if(!bot) TE_SetupBeamPoints(startPos, bulletPos, g_Sprite, 0, 0, 0, g_LaserLife, g_LaserWidth, g_LaserWidth, 1, 0.0, g_LaserColor, 0);
+		else TE_SetupBeamPoints(startPos, bulletPos, g_Sprite, 0, 0, 0, g_LaserLife, g_LaserWidth, g_LaserWidth, 1, 0.0, g_BotsLaserColor, 0);
+		
 		TE_SendToAll();
 	}
+	
  	return Plugin_Continue;
 }
