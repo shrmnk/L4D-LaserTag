@@ -1,10 +1,10 @@
-#Laser Tag for Left 4 Dead & Left 4 Dead 2
+# Laser Tag for Left 4 Dead & Left 4 Dead 2
 Released on the AlliedModders forum - https://forums.alliedmods.net/showthread.php?p=1203196
 
 Shotguns (every single pellet), Rifles, SMGs, Sniper Rifles, Pistols supported and can be disabled by convar.
 Melee weapons and grenades are disabled.
 
-##Configurable Variables (CONVARs)
+## Configurable Variables (CONVARs)
 * Laser Colour (Red, Green, Blue):
   * l4d_lasertag_red
   * l4d_lasertag_green
@@ -32,7 +32,7 @@ Melee weapons and grenades are disabled.
 * Bots can Laser Tag?
   * l4d_lasertag_bots
 
-##Changelog
+## Changelog
 ```
 v0.1
  - Initial Release
